@@ -112,11 +112,11 @@ Every message is a compact binary packet — not plain text. I designed every by
 
 | 2× Heltec WiFi LoRa 32 V3 | ESP32-S3 + SX1262 radio + OLED display + LiPo charging |
 
-| Frequency | 433 MHz — legal in India, no licence needed |
+| Frequency | 433 MHz — legal in India |
 
 | Range | 2–5 km open area |
 
-| Cost | \~₹3,500 total |
+
 
 
 
@@ -146,69 +146,6 @@ Every message is a compact binary packet — not plain text. I designed every by
 
 \---
 
-
-
-\## How to Flash
-
-
-
-1\. Install Arduino IDE 2.x
-
-2\. Add ESP32 board support URL in preferences:
-
-&#x20;  `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package\_esp32\_index.json`
-
-3\. Select board: \*\*Heltec WiFi LoRa 32(V3)\*\*
-
-4\. Install libraries listed above via Library Manager
-
-5\. Flash `NodeA/NodeA.ino` to Board A
-
-6\. Flash `NodeB/NodeB.ino` to Board B
-
-7\. Open Serial Monitor at \*\*115200 baud\*\*
-
-
-
-\---
-
-
-
-\## What you should see
-
-
-
-\*\*Node A serial monitor:\*\*
-
-=== NODE A — LoRa Secure Protocol ===
-
-\[OK] Radio ready.
-
-\[TX] DATA: {"t":27.3,"h":64.8,"b":3.21}
-
-\[TX] seq=0 attempt=1 waiting ACK...
-
-\[ACK] Confirmed seq=0
-
-
-
-\*\*Node B serial monitor:\*\*
-
-=== NODE B — LoRa Secure Protocol ===
-
-\[OK] Radio ready. Listening for Node A...
-
-\[RX] src=1 type=0x01 seq=0 RSSI=-17.0 SNR=11.2
-
-\[DECRYPT] {"t":27.3,"h":64.8,"b":3.21}
-
-Temp: 27.3C  Hum: 64.8%  Bat: 3.21V
-
-\[ACK] Sent for seq=0
-
-
-
-\---
 
 
 
