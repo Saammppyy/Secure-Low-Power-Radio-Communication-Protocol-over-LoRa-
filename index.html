@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoRa Messenger</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--ink:#14213d;--mute:#667085;--line:#d8dee6;--mine:#14213d;--minetx:#fff;--ok:#1a7f4b;--bad:#b42318;--warn:#b26a00}
+@media (prefers-color-scheme:dark){:root{--bg:#10151c;--card:#1a212b;--ink:#e8edf3;--mute:#98a2b3;--line:#2b3542;--mine:#e8edf3;--minetx:#10151c;--ok:#4ade80;--bad:#f87171;--warn:#fbbf24}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif;display:flex;flex-direction:column;max-width:640px;margin:0 auto}
+header{padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+header h1{font-size:17px;margin:0;flex:1}
+#state{font-size:13px;color:var(--mute)}
+button{font:inherit;border:0;border-radius:8px;padding:10px 16px;background:var(--mine);color:var(--minetx);cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--warn);outline-offset:2px}
+#log{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.empty{color:var(--mute);text-align:center;margin:auto;max-width:28ch}
+.m{max-width:85%;padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);word-wrap:break-word;white-space:pre-wrap}
+.m.me{align-self:flex-end;background:var(--mine);color:var(--minetx);border-color:var(--mine)}
+.m small{display:block;margin-top:4px;font-size:12px;opacity:.8}
+.m.ok small{color:var(--ok)} .m.me.ok small{color:inherit}
+.m.bad small{color:var(--bad)} .m.me.bad small{color:inherit}
+form{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);padding-bottom:max(12px,env(safe-area-inset-bottom))}
+textarea{flex:1;font:inherit;resize:none;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--card);color:var(--ink)}
+#count{font-size:12px;color:var(--mute);padding:0 16px 6px;text-align:right}
+</style>
+</head>
+<body>
+<header>
+  <h1>LoRa Messenger</h1>
+  <span id="state">Not connected</span>
+  <button id="conn" type="button">Connect</button>
+</header>
+<div id="log"><p class="empty" id="empty">Connect to your board, then type a message to send over LoRa.</p></div>
+<div id="count"><span id="n">0</span>/160 bytes</div>
+<form id="f">
+  <textarea id="t" rows="2" placeholder="Type a message" disabled></textarea>
+  <button id="send" disabled>Send</button>
+</form>
+<script>
+const SVC='7a1c0001-5d4e-4b8a-9c3f-2e6b1a0d4f11',RX='7a1c0002-5d4e-4b8a-9c3f-2e6b1a0d4f11',TX='7a1c0003-5d4e-4b8a-9c3f-2e6b1a0d4f11',MAX=160;
+const $=id=>document.getElementById(id);
+const enc=new TextEncoder(),dec=new TextDecoder();
+let dev,rx,lastPending=null;
+
+function add(text,cls,status){
+  $('empty')?.remove();
+  const d=document.createElement('div');d.className='m '+cls;
+  d.append(text);
+  const s=document.createElement('small');s.textContent=status||'';d.append(s);
+  $('log').append(d);$('log').scrollTop=1e9;return d;
+}
+function setStatus(el,txt,cls){if(!el)return;el.querySelector('small').textContent=txt;el.classList.remove('ok','bad');if(cls)el.classList.add(cls)}
+
+function onNotify(e){
+  const msg=dec.decode(e.target.value),tag=msg[0],body=msg.slice(2);
+  if(tag==='S'){lastPending=lastPending||add(body,'me','Sending…')}
+  else if(tag==='D'){setStatus(lastPending,'Delivered','ok');lastPending=null}
+  else if(tag==='F'){setStatus(lastPending,'Not delivered, no reply from the other node','bad');lastPending=null}
+  else if(tag==='B'){setStatus(lastPending,'Board busy, try again','bad');lastPending=null}
+  else if(tag==='R'){const i=body.indexOf('|');add(body.slice(i+1),'','From node '+body.slice(0,i))}
+}
+
+function ui(connected){
+  $('state').textContent=connected?'Connected to '+dev.name:'Not connected';
+  $('conn').textContent=connected?'Disconnect':'Connect';
+  $('t').disabled=$('send').disabled=!connected;
+}
+
+$('conn').onclick=async()=>{
+  if(dev?.gatt.connected){dev.gatt.disconnect();return}
+  if(!navigator.bluetooth){alert('Web Bluetooth needs Chrome on Android (or desktop), over HTTPS.');return}
+  try{
+    dev=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
+    dev.addEventListener('gattserverdisconnected',()=>ui(false));
+    const srv=await dev.gatt.connect(),svc=await srv.getPrimaryService(SVC);
+    rx=await svc.getCharacteristic(RX);
+    const tx=await svc.getCharacteristic(TX);
+    await tx.startNotifications();tx.addEventListener('characteristicvaluechanged',onNotify);
+    ui(true);
+  }catch(err){$('state').textContent='Could not connect: '+err.message}
+};
+
+$('t').oninput=()=>{const n=enc.encode($('t').value).length;$('n').textContent=n;$('send').disabled=n===0||n>MAX||!dev?.gatt.connected};
+
+$('f').onsubmit=async e=>{
+  e.preventDefault();
+  const text=$('t').value.trim(),b=enc.encode(text);
+  if(!text||b.length>MAX)return;
+  lastPending=add(text,'me','Sending…');
+  $('t').value='';$('n').textContent=0;
+  try{await(rx.writeValueWithResponse?rx.writeValueWithResponse(b):rx.writeValue(b))}
+  catch(err){setStatus(lastPending,'Write failed: '+err.message,'bad');lastPending=null}
+};
+</script>
+</body>
+</html>
